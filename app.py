@@ -1,47 +1,35 @@
-
-
-from flask import Flask, request, jsonify
-import joblib
+import streamlit as st
 import pandas as pd
-import numpy as np
-
-app = Flask(__name__)
+import joblib
+import plotly.graph_objects as go
 
 # Load the trained ARIMA model
-# Make sure 'arima_model.joblib' is in the same directory as app.py or provide the full path
 model = joblib.load('arima_model.joblib')
 
-@app.route('/')
-def home():
-    return "Welcome to the Demand Forecasting API!"
+st.title('Demand Forecasting App')
+st.write('Forecast future demand using an ARIMA model.')
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    try:
-        # Get the number of periods to forecast from the request JSON
-        data = request.get_json(force=True)
-        forecast_periods = data.get('periods', 1) # Default to 1 period if not specified
+# User input for number of months to forecast
+months_to_forecast = st.slider(
+    'Select the number of months to forecast:',
+    min_value=1,
+    max_value=24,
+    value=6
+)
 
-        if not isinstance(forecast_periods, int) or forecast_periods <= 0:
-            return jsonify({'error': 'Invalid number of periods. Must be a positive integer.'}), 400
+if st.button('Generate Forecast'):
+    # Make future predictions
+    future_forecast = model.predict(n_periods=months_to_forecast)
 
-        # Make predictions
-        predictions = model.predict(n_periods=forecast_periods)
+    # Create a DataFrame for the forecast with appropriate date index
+    # Assuming the last date in your training data was the last date in the original df
+    # You might need to adjust this if your training data ends earlier
+    last_date_in_data = pd.to_datetime('2024-12-01') # Based on the last date in your dataframe df
+    future_dates = pd.date_range(start=last_date_in_data + pd.DateOffset(months=1), periods=months_to_forecast, freq='MS')
+    
+    forecast_df = pd.DataFrame({'Forecasted Demand (000L)': future_forecast}, index=future_dates)
 
-        # Convert predictions to a list or dictionary for JSON response
-        # You might want to generate future dates for the index here
-        # For simplicity, we'll just return the values
-        return jsonify({'predictions': predictions.tolist()})
+    st.subheader(f'Forecast for the next {months_to_forecast} months:')
+    st.dataframe(forecast_df)
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    # In a production environment, use a production-ready WSGI server like Gunicorn or uWSGI.
-    # For local testing, you can run:
-    # flask run
-    # Or, for Google Colab/Jupyter notebook, you can use ngrok for public access:
-    # !pip install flask_ngrok
-    # from flask_ngrok import run_with_ngrok
-    # run_with_ngrok(app)
-    app.run(debug=True, port=5000)
+    # Plotting the forecast
